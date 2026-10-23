@@ -1,0 +1,46 @@
+erDiagram
+    DEPARTMENTS ||--o{ USERS : "có nhân viên"
+    DEPARTMENTS ||--o{ TICKETS : "phòng ban người tạo"
+    USERS ||--o{ TICKETS : "requester_id (tạo)"
+    USERS ||--o{ TICKETS : "assignee_id (xử lý)"
+    CATEGORIES ||--o{ TICKETS : "category_id (chính thức)"
+    CATEGORIES ||--o{ TICKETS : "ai_suggested_category_id"
+    TICKETS ||--o{ TICKET_STATUS_HISTORY : "lịch sử trạng thái"
+    TICKETS ||--o{ TICKET_COMMENTS : "bình luận"
+    TICKETS ||--o{ TICKET_ATTACHMENTS : "tệp đính kèm"
+    TICKET_COMMENTS |o--o{ TICKET_ATTACHMENTS : "đính kèm trong bình luận"
+    TICKETS ||--o{ SLA_PAUSE_LOG : "tạm dừng SLA"
+    TICKETS ||--o{ AI_CLASSIFICATION_LOGS : "log gọi AI"
+    TICKETS ||--o{ NOTIFICATIONS : "phát sinh thông báo"
+    USERS ||--o{ NOTIFICATIONS : "nhận"
+    USERS ||--o{ TICKET_COMMENTS : "viết"
+    USERS ||--o{ TICKET_STATUS_HISTORY : "changed_by"
+    CATEGORIES ||--o{ AI_CLASSIFICATION_LOGS : "predicted/final"
+
+    PRIORITY_MATRIX {
+        varchar impact
+        varchar urgency
+        tinyint score
+        varchar priority
+    }
+    SLA_CONFIG {
+        varchar priority PK
+        int response_minutes
+        int resolution_minutes
+        boolean is_24x7
+    }
+    BUSINESS_HOURS_CONFIG {
+        tinyint day_of_week
+        date holiday_date
+        time start_time
+        time end_time
+    }
+    TICKETS {
+        bigint id PK
+        varchar status
+        varchar priority
+        boolean is_resolution_confirmed
+        boolean is_auto_closed
+        int reopen_count
+        datetime sla_deadline
+    }
