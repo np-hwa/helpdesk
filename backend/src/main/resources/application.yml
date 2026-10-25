@@ -30,7 +30,8 @@ spring:
 
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    # Đọc trực tiếp các file SQL migration từ thư mục db/ nằm ở thư mục gốc (root)
+    locations: filesystem:../db
     baseline-on-migrate: true
 
 # spring-boot-properties-suppress
