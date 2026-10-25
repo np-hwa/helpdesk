@@ -1,9 +1,14 @@
 package com.helpdesk.security;
 
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.UnsupportedJwtException;
 import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.SignatureException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
@@ -11,18 +16,21 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.List;
 
 @Component
 public class JwtTokenProvider {
+
+    private static final Logger logger = LoggerFactory.getLogger(JwtTokenProvider.class);
 
     private final SecretKey signingKey;
     private final long jwtExpirationMs;
     private final long refreshExpirationMs;
 
     public JwtTokenProvider(
-            @Value("${app.jwt.secret:HelpdeskSuperSecretKeyForJwtAuthentication2026!@#HelpdeskSuperSecretKeyForJwtAuthentication2026!@#}") String jwtSecret,
-            @Value("${app.jwt.expiration-ms:86400000}") long jwtExpirationMs,
-            @Value("${app.jwt.refresh-expiration-ms:604800000}") long refreshExpirationMs) {
+            @Value("${helpdesk.jwt.secret}") String jwtSecret,
+            @Value("${helpdesk.jwt.access-token-expiration-ms}") long jwtExpirationMs,
+            @Value("${helpdesk.jwt.refresh-token-expiration-ms}") long refreshExpirationMs) {
         this.signingKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
         this.jwtExpirationMs = jwtExpirationMs;
         this.refreshExpirationMs = refreshExpirationMs;
@@ -30,7 +38,22 @@ public class JwtTokenProvider {
 
     public String generateAccessToken(Authentication authentication) {
         CustomUserDetails userPrincipal = (CustomUserDetails) authentication.getPrincipal();
-        return generateAccessTokenFromEmail(userPrincipal.getUsername());
+        
+        List<String> roles = userPrincipal.getAuthorities().stream()
+        .map(a -> a.getAuthority())
+        .toList();
+
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
+
+        return Jwts.builder()
+                .subject(userPrincipal.getUsername())
+                .claim("type", "ACCESS")
+                .claim("roles", roles) 
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(signingKey, Jwts.SIG.HS256)
+                .compact();
     }
 
     public String generateAccessTokenFromEmail(String email) {
@@ -39,6 +62,7 @@ public class JwtTokenProvider {
 
         return Jwts.builder()
                 .subject(email)
+                .claim("type", "ACCESS")
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(signingKey, Jwts.SIG.HS256)
@@ -51,6 +75,7 @@ public class JwtTokenProvider {
 
         return Jwts.builder()
                 .subject(email)
+                .claim("type", "REFRESH")
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(signingKey, Jwts.SIG.HS256)
@@ -61,6 +86,15 @@ public class JwtTokenProvider {
         return parseClaims(token).getSubject();
     }
 
+    public String getTokenType(String token) {
+        return parseClaims(token).get("type", String.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> getRolesFromToken(String token) {
+        return parseClaims(token).get("roles", List.class);
+    }
+
     public Date getExpirationFromToken(String token) {
         return parseClaims(token).getExpiration();
     }
@@ -69,9 +103,18 @@ public class JwtTokenProvider {
         try {
             parseClaims(token);
             return true;
-        } catch (JwtException | IllegalArgumentException ex) {
-            return false;
+        } catch (SignatureException ex) {
+            logger.error("Chữ ký JWT không hợp lệ: {}", ex.getMessage());
+        } catch (MalformedJwtException ex) {
+            logger.error("Token JWT không đúng định dạng: {}", ex.getMessage());
+        } catch (ExpiredJwtException ex) {
+            logger.error("Token JWT đã hết hạn: {}", ex.getMessage());
+        } catch (UnsupportedJwtException ex) {
+            logger.error("Token JWT không được hỗ trợ: {}", ex.getMessage());
+        } catch (IllegalArgumentException ex) {
+            logger.error("Chuỗi claims JWT rỗng: {}", ex.getMessage());
         }
+        return false;
     }
 
     private Claims parseClaims(String token) {

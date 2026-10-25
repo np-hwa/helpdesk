@@ -4,6 +4,8 @@ import com.helpdesk.dto.auth.AuthResponse;
 import com.helpdesk.dto.auth.LoginRequest;
 import com.helpdesk.dto.auth.RefreshTokenRequest;
 import com.helpdesk.entity.User;
+import com.helpdesk.exception.InvalidTokenException;
+import com.helpdesk.exception.ResourceNotFoundException;
 import com.helpdesk.repository.UserRepository;
 import com.helpdesk.security.CustomUserDetails;
 import com.helpdesk.security.JwtTokenProvider;
@@ -49,12 +51,16 @@ public class AuthService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public AuthResponse refreshToken(RefreshTokenRequest request) {
         String refreshToken = request.getRefreshToken();
-        if (tokenProvider.validateToken(refreshToken)) {
+        
+        if (tokenProvider.validateToken(refreshToken) 
+                && "REFRESH".equals(tokenProvider.getTokenType(refreshToken))) {
+            
             String email = tokenProvider.getEmailFromToken(refreshToken);
             User user = userRepository.findByEmail(email)
-                    .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng từ token"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng với email: " + email));
 
             String newAccessToken = tokenProvider.generateAccessTokenFromEmail(email);
 
@@ -73,7 +79,7 @@ public class AuthService {
                     .departmentName(deptName)
                     .build();
         } else {
-            throw new RuntimeException("Refresh token không hợp lệ hoặc đã hết hạn");
+            throw new InvalidTokenException("Refresh token không hợp lệ hoặc đã hết hạn");
         }
     }
 }

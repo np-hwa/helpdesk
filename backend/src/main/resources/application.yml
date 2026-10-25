@@ -23,23 +23,26 @@ spring:
     show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        "[format_sql]": true
         dialect: org.hibernate.dialect.MySQLDialect
         jdbc:
-          time_zone: Asia/Ho_Chi_Minh
+          "[time_zone]": Asia/Ho_Chi_Minh
 
   flyway:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
 
-# Custom Application Config
-helpdesk:
+# spring-boot-properties-suppress
+app:
   jwt:
     # Key chuỗi Secret 256-bit+ hoá Base64
     secret: ${JWT_SECRET:9a4f2c8d7e1b5a3f6c8e0d2b4a6f8c1d3e5b7a9f2c4d6e8b0a2c4d6e8f0a2b4c}
-    access-token-expiration-ms: ${JWT_ACCESS_EXPIRATION:86400000} # 1 ngày (86,400,000 ms)
-    refresh-token-expiration-ms: ${JWT_REFRESH_EXPIRATION:604800000} # 7 ngày (604,800,000 ms)
+    expiration-ms: ${JWT_ACCESS_EXPIRATION:86400000} # 1 ngày (86,400,000 ms)
+    refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION:604800000} # 7 ngày (604,800,000 ms)
+
+# spring-boot-properties-suppress
+helpdesk:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
 
