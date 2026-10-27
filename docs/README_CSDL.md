@@ -2,9 +2,10 @@
 
 Tài liệu mô tả schema hiện tại của hệ thống Helpdesk: **MySQL 8.0.16+**, InnoDB, `utf8mb4`. Nội dung được đối chiếu với các migration đang có trong thư mục `database/`.
 
-- `V1__create_schema.sql`: tạo **16 bảng** cùng khóa, chỉ mục và ràng buộc.
+- `V1__create_schema.sql`: tạo **16 bảng** cùng khóa, chỉ mục và ràng buộc ban đầu.
 - `V2__seed_reference_data.sql`: nạp dữ liệu danh mục và cấu hình dùng chung.
 - `V3__seed_demo_data.sql`: nạp dữ liệu demo, chỉ được chạy trong profile dev.
+- `V4__department_soft_delete_and_integrity.sql`: thêm xóa mềm phòng ban và ràng buộc toàn vẹn dữ liệu.
 - Khi Flyway chạy, database có thêm bảng `flyway_schema_history` do Flyway quản lý; đây không phải bảng nghiệp vụ.
 - Schema hiện tại **không có** bảng `knowledge_base`.
 
@@ -62,6 +63,7 @@ CREATE TABLE departments (
     id          BIGINT       NOT NULL AUTO_INCREMENT,
     name        VARCHAR(100) NOT NULL,
     description VARCHAR(255) NULL,
+    is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     UNIQUE KEY uk_departments_name (name)
@@ -72,7 +74,10 @@ CREATE TABLE departments (
 | `id` | PK đại diện, để `users`/`tickets` tham chiếu |
 | `name` `NOT NULL` + `UNIQUE` | Hai phòng không được trùng tên; là thông tin bắt buộc. Dùng UNIQUE để dữ liệu demo tra cứu `WHERE name='Kế toán'` luôn ra đúng một dòng |
 | `description` `NULL` | Mô tả không bắt buộc |
+| `is_active` | `FALSE` = ngừng sử dụng (xóa mềm), nhưng vẫn giữ FK và lịch sử. Tên vẫn duy nhất; kích hoạt lại bản ghi cũ thay vì tạo phòng trùng tên |
 | `created_at` | Dấu thời gian tạo, mặc định do DB điền |
+
+Không xóa vật lý phòng ban; thao tác ngừng sử dụng cần cập nhật `is_active = FALSE`. Danh sách phòng ban để chọn/gán mới phải lọc `is_active = TRUE`, còn báo cáo và hồ sơ cũ vẫn tra được phòng ban không hoạt động.
 
 ### 3.2 `categories` – danh mục sự cố
 Cùng khuôn với `departments`, thêm `is_active BOOLEAN DEFAULT TRUE`.
@@ -88,6 +93,8 @@ Cùng khuôn với `departments`, thêm `is_active BOOLEAN DEFAULT TRUE`.
 | `priority` | VARCHAR(10), CHECK ∈ {LOW, MEDIUM, HIGH, CRITICAL} | Kết quả tra ma trận |
 
 **Khóa:** `UNIQUE (impact, urgency)` – mỗi cặp chỉ có đúng một kết quả, nên 3×3 = 9 dòng, không thể nhập trùng hay mâu thuẫn. Đây là **khóa nghiệp vụ** thật sự, còn `id` chỉ là khóa kỹ thuật.
+
+V4 ràng buộc thêm rằng `score` phải bằng tổng trọng số Impact/Urgency, và `priority` phải tương ứng với score theo quy tắc trong V2. Điều này ngăn cấu hình hợp lệ về kiểu dữ liệu nhưng sai nghiệp vụ.
 
 ### 3.4 `sla_config` – chính sách SLA
 ```sql
@@ -122,6 +129,8 @@ Một bảng chứa **hai loại dòng**:
 | `CHECK ((day_of_week IS NULL) <> (holiday_date IS NULL))` | Mỗi dòng phải thuộc **đúng một** loại, không được vừa tuần vừa lễ, cũng không được trống cả hai |
 | `CHECK is_working_day = FALSE OR (start_time < end_time ...)` | Ngày làm việc bắt buộc có giờ bắt đầu < giờ kết thúc |
 | `break_start`, `break_end` `NULL` | Nghỉ trưa 12:00–13:00; tính SLA phải trừ khoảng này |
+
+V4 yêu cầu giờ nghỉ phải có đủ cả giờ bắt đầu/kết thúc và nằm bên trong ca làm; ngày nghỉ tuần/ngày lễ không được có giờ làm hoặc giờ nghỉ.
 
 **Vì sao gộp một bảng thay vì hai:** cùng là "lịch làm việc", khi tính SLA chỉ cần một truy vấn; ngày lễ ghi đè lịch tuần.
 
@@ -189,6 +198,8 @@ CREATE TABLE users (
 | Xử lý & xác nhận | `resolution TEXT`, `is_resolution_confirmed`, `resolution_confirmed_at`, `is_auto_closed`, `reopen_count` | Cơ chế đóng ticket **do người gửi xác nhận**. `is_resolution_confirmed` ba trạng thái: NULL = chờ, TRUE = xong, FALSE = chưa xong (mở lại). `is_auto_closed` = hệ thống tự đóng sau N ngày không phản hồi. `reopen_count` đếm số lần mở lại → chỉ số Reopen Rate |
 | SLA | `sla_deadline`, `sla_status`, `overdue_minutes` | Hạn chót, tình trạng (ON_TRACK / MET / BREACHED), số phút trễ |
 | Hủy | `cancel_reason VARCHAR(255)` | Lý do hủy, bắt buộc khi `CANCELLED` |
+
+V4 bổ sung điều kiện trạng thái `RESOLVED`/`CLOSED` phải có `resolved_at`, `CLOSED` phải có `closed_at`, và lý do hủy không được rỗng hoặc chỉ chứa khoảng trắng.
 
 ### 5.1 Khóa ngoại của `tickets`
 | FK | Trỏ tới | Vì sao |
@@ -273,6 +284,8 @@ Mặc định `ON DELETE RESTRICT`: không cho xóa user/phòng ban/category đa
 | `comment_id` `NULL` | NULL = đính kèm lúc tạo ticket; có giá trị = đính kèm trong một bình luận |
 
 **Vì sao không lưu file trong DB (BLOB):** làm DB phình to, chậm sao lưu. File để trên đĩa/volume, DB chỉ giữ đường dẫn.
+
+V4 dùng khóa ngoại ghép `(ticket_id, comment_id)` để bảo đảm bình luận đính kèm thuộc đúng ticket, không chỉ bảo đảm cả hai ID đều tồn tại độc lập.
 
 ### 6.5 `sla_pause_log` – tạm dừng SLA
 | Cột | Vì sao |
@@ -375,9 +388,10 @@ Chạy theo đúng thứ tự phiên bản bằng Flyway (xem `database/README.m
 
 | File | Nội dung |
 |---|---|
-| `database/migration/V1__create_schema.sql` | Tạo 16 bảng, khóa, chỉ mục và CHECK |
+| `database/migration/V1__create_schema.sql` | Tạo 16 bảng, khóa, chỉ mục và CHECK ban đầu |
 | `database/migration/V2__seed_reference_data.sql` | Nạp 7 danh mục, ma trận Impact/Urgency 3×3, SLA 4 mức và lịch làm việc T2–T6 |
 | `database/seed-dev/V3__seed_demo_data.sql` | (dev) 5 phòng ban, 7 tài khoản, 6 ticket và dữ liệu mẫu liên quan |
+| `database/migration/V4__department_soft_delete_and_integrity.sql` | Thêm xóa mềm phòng ban và các ràng buộc toàn vẹn mới |
 
 V1 hiện tại là schema được viết lại. Database đã áp dụng một V1 cũ có thể gặp lỗi checksum; không dùng lại database production bằng cách xóa lịch sử Flyway hoặc sửa trực tiếp migration đã chạy. Với dev, tạo database trống rồi chạy lại profile dev; với production, cần sao lưu và lập quy trình chuyển đổi dữ liệu riêng. Mọi thay đổi schema tiếp theo cần migration phiên bản mới, không sửa migration đã được áp dụng.
 
@@ -387,10 +401,10 @@ Khởi tạo MySQL và chạy Flyway bằng Docker Compose:
 ```bash
 docker compose up -d mysql
 
-# Dev/demo: V1 + V2 + seed demo V3
+# Dev/demo: V1 + V2 + seed demo V3 + V4
 docker compose --profile dev run --rm flyway
 
-# Production: chỉ V1 + V2
+# Production: V1 + V2 + V4, không nạp seed demo V3
 docker compose --profile prod run --rm flyway-prod
 ```
 
