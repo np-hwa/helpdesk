@@ -1,12 +1,2 @@
-/*
-!/.gitignore
-!/backend/
-!/db/
-!/README.md
-
-backend/target/
-*.class
-*.log
-.idea/
-.vscode/
 .env
+mysql_data/
