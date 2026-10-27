@@ -1,5 +1,5 @@
 # Khởi động DB:        docker compose up -d mysql
-# Migration dev/demo:  docker compose --profile dev run --rm flyway        (V1..V5)
+# Migration dev/demo:  docker compose --profile dev run --rm flyway        (V1..V4)
 # Migration prod:      docker compose --profile prod run --rm flyway-prod  (V1, V2, V4)
 services:
   mysql:
@@ -24,7 +24,7 @@ services:
       timeout: 5s
       retries: 30
 
-  # DEV / DEMO: schema + dữ liệu cấu hình + dữ liệu demo (V1..V5)
+  # DEV / DEMO: schema + dữ liệu cấu hình + dữ liệu demo (V1..V4)
   flyway:
     image: flyway/flyway:10
     profiles: ["dev"]
