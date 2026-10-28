@@ -1,0 +1,60 @@
+# Khởi động DB:        docker compose up -d mysql
+# Migration dev/demo:  docker compose --profile dev run --rm flyway        (V1..V5)
+# Migration prod:      docker compose --profile prod run --rm flyway-prod  (V1, V2, V4)
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: helpdesk-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-helpdesk}
+      TZ: Asia/Ho_Chi_Minh
+    # Cấu hình truyền bằng tham số (không mount my.cnf vì Windows làm MySQL bỏ qua file world-writable)
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --innodb-ft-min-token-size=2
+      - --default-time-zone=+07:00
+    ports: ["3306:3306"]
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # DEV / DEMO: schema + dữ liệu cấu hình + dữ liệu demo (V1..V5)
+  flyway:
+    image: flyway/flyway:10
+    profiles: ["dev"]
+    depends_on:
+      mysql: { condition: service_healthy }
+    volumes:
+      - ./database/migration:/flyway/sql/migration:ro
+      - ./database/seed-dev:/flyway/sql/seed-dev:ro
+    command:
+      - -url=jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-helpdesk}?allowPublicKeyRetrieval=true&useSSL=false
+      - -user=root
+      - -password=${MYSQL_ROOT_PASSWORD}
+      - -locations=filesystem:/flyway/sql/migration,filesystem:/flyway/sql/seed-dev
+      - -connectRetries=10
+      - migrate
+
+  # PROD: chỉ V1, V2, V4 (không có tài khoản/dữ liệu demo)
+  flyway-prod:
+    image: flyway/flyway:10
+    profiles: ["prod"]
+    depends_on:
+      mysql: { condition: service_healthy }
+    volumes:
+      - ./database/migration:/flyway/sql/migration:ro
+    command: >
+      -url=jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-helpdesk}?allowPublicKeyRetrieval=true&useSSL=false
+      -user=root -password=${MYSQL_ROOT_PASSWORD}
+      -locations=filesystem:/flyway/sql/migration
+      -connectRetries=10
+      migrate
+
+volumes:
+  mysql_data:

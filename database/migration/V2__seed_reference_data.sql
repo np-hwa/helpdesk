@@ -1,17 +1,17 @@
 -- =====================================================================
 -- V2__seed_reference_data.sql  |  Dữ liệu cấu hình BẮT BUỘC (mọi môi trường)
+-- Danh mục lấy theo báo cáo BC_16_V2 (mục 1.2.1 và bảng 2.2).
 -- =====================================================================
 
--- Danh mục sự cố
+-- Danh mục sự cố (7 nhóm theo báo cáo)
 INSERT INTO categories (name, description) VALUES
- ('Hardware', 'Máy tính, màn hình, thiết bị ngoại vi'),
- ('Software', 'Cài đặt, lỗi phần mềm nghiệp vụ và văn phòng'),
- ('Network',  'Mạng LAN, Wi-Fi, VPN, mất kết nối'),
- ('Email',    'Hộp thư, gửi/nhận mail, lịch'),
- ('Printer',  'Máy in, máy scan'),
- ('Account',  'Cấp/khóa tài khoản, quên mật khẩu, cấp quyền'),
- ('ERP',      'Hệ thống ERP/CRM nội bộ'),
- ('Website',  'Website/cổng thông tin nội bộ');
+ ('Hardware',                'Máy tính, màn hình, máy in, thiết bị ngoại vi'),
+ ('Software',                'Cài đặt, lỗi phần mềm nghiệp vụ và văn phòng'),
+ ('Network & Connectivity',  'Mạng LAN, Wi-Fi, VPN, mất kết nối'),
+ ('Email & Collaboration',   'Hộp thư, gửi/nhận mail, lịch, công cụ cộng tác'),
+ ('User Services',           'Hỗ trợ người dùng, yêu cầu dịch vụ, hướng dẫn sử dụng'),
+ ('Access',                  'Cấp/khóa tài khoản, quên mật khẩu, cấp quyền truy cập'),
+ ('General',                 'Các yêu cầu chung chưa thuộc nhóm nào');
 
 -- Ma trận Impact x Urgency  (score = trọng số Impact + trọng số Urgency)
 --   score 2,3 -> LOW | 4 -> MEDIUM | 5 -> HIGH | 6 -> CRITICAL
@@ -26,7 +26,8 @@ INSERT INTO priority_matrix (impact, urgency, score, priority) VALUES
  ('HIGH',   'MEDIUM', 5, 'HIGH'),
  ('HIGH',   'HIGH',   6, 'CRITICAL');
 
--- SLA (phút). Low: 24 giờ làm việc = 1440 phút ~ 3 ngày làm việc (8h/ngày)
+-- SLA (phút). LOW: 1440 phút = 24 giờ làm việc = 3 ngày làm việc (8h/ngày).
+-- warn_level1/2_percent dùng mặc định 50 / 80 (cảnh báo IT Support / IT Leader).
 INSERT INTO sla_config (priority, response_minutes, resolution_minutes, is_24x7) VALUES
  ('CRITICAL',  15,  120, TRUE),
  ('HIGH',      30,  240, FALSE),
