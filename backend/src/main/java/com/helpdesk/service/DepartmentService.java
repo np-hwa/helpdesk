@@ -3,6 +3,7 @@ package com.helpdesk.service;
 import com.helpdesk.dto.department.DepartmentRequest;
 import com.helpdesk.dto.department.DepartmentResponse;
 import com.helpdesk.entity.Department;
+import com.helpdesk.enums.UserStatus;
 import com.helpdesk.exception.BadRequestException;
 import com.helpdesk.exception.ResourceNotFoundException;
 import com.helpdesk.repository.DepartmentRepository;
@@ -45,12 +46,13 @@ public class DepartmentService {
             throw new BadRequestException("Tên phòng ban đã tồn tại: " + normalizedName);
         }
 
-                 Department department = Department.builder()
+        Department department = Department.builder()
                 .name(normalizedName)
                 .description(request.getDescription() != null ? request.getDescription().trim() : null)
                 .build();
 
-        @NonNull Department saved = departmentRepository.save(department);
+        @NonNull
+        Department saved = departmentRepository.save(department);
         return mapToResponse(saved);
     }
 
@@ -61,8 +63,9 @@ public class DepartmentService {
 
         String normalizedName = request.getName().trim();
 
-        // Dùng equalsIgnoreCase để cho phép sửa kiểu chữ (ví dụ: "it" -> "IT") của chính phòng ban đó
-        if (!department.getName().equalsIgnoreCase(normalizedName) 
+        // Dùng equalsIgnoreCase để cho phép sửa kiểu chữ (ví dụ: "it" -> "IT") của
+        // chính phòng ban đó
+        if (!department.getName().equalsIgnoreCase(normalizedName)
                 && departmentRepository.existsByName(normalizedName)) {
             throw new BadRequestException("Tên phòng ban đã tồn tại: " + normalizedName);
         }
@@ -70,22 +73,25 @@ public class DepartmentService {
         department.setName(normalizedName);
         department.setDescription(request.getDescription() != null ? request.getDescription().trim() : null);
 
-        @NonNull Department updated = departmentRepository.save(department);
+        @NonNull
+        Department updated = departmentRepository.save(department);
         return mapToResponse(updated);
     }
 
+    // 2. Soft-delete phòng ban (chuyển is_active sang false)
     @Transactional
     public void deleteDepartment(@NonNull Long id) {
-        if (!departmentRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Không tìm thấy phòng ban với ID: " + id);
+        Department department = departmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phòng ban với ID: " + id));
+
+        // Chỉ chặn nếu phòng ban còn nhân sự đang hoạt động (ACTIVE)
+        if (userRepository.existsByDepartmentIdAndStatus(id, UserStatus.ACTIVE)) {
+            throw new BadRequestException(
+                    "Không thể ngừng hoạt động phòng ban này vì vẫn còn nhân viên đang hoạt động trực thuộc");
         }
 
-        // Chặn xóa nếu phòng ban đang có nhân viên để tránh lỗi Foreign Key SQL
-        if (userRepository.existsByDepartmentId(id)) {
-            throw new BadRequestException("Không thể xóa phòng ban này vì vẫn còn nhân viên trực thuộc");
-        }
-
-        departmentRepository.deleteById(id);
+        department.setIsActive(false);
+        departmentRepository.save(department);
     }
 
     private DepartmentResponse mapToResponse(Department department) {
@@ -93,7 +99,27 @@ public class DepartmentService {
                 .id(department.getId())
                 .name(department.getName())
                 .description(department.getDescription())
+                .isActive(department.getIsActive())
                 .createdAt(department.getCreatedAt())
                 .build();
+    }
+    // 1. Lấy danh sách các phòng ban đang hoạt động (dùng cho dropdown form hoặc user/ticket)
+
+    @Transactional(readOnly = true)
+    public List<DepartmentResponse> getActiveDepartments() {
+        return departmentRepository.findByIsActiveTrue().stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    @Transactional
+    public DepartmentResponse reactivateDepartment(@NonNull Long id) {
+        Department department = departmentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phòng ban với ID: " + id));
+
+        department.setIsActive(true);
+        @NonNull
+        Department updated = departmentRepository.save(department);
+        return mapToResponse(updated);
     }
 }

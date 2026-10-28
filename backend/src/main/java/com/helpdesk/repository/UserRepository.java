@@ -14,4 +14,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     
     // Dùng để kiểm tra trước khi xóa phòng ban
     boolean existsByDepartmentId(Long departmentId);
+    // Nhân viên đang Active trong phòng ban
+    boolean existsByDepartmentIdAndStatus(Long departmentId, com.helpdesk.enums.UserStatus status);
 }

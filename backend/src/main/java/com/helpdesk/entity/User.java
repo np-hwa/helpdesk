@@ -32,6 +32,10 @@ public class User {
     @Column(length = 20)
     private String phone;
 
+    @Builder.Default
+    @Column(name = "email_notify", nullable = false)
+    private Boolean emailNotify = true;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "department_id")
     private Department department;
@@ -57,6 +61,9 @@ public class User {
         updatedAt = LocalDateTime.now();
         if (status == null) {
             status = UserStatus.ACTIVE;
+        }
+        if (emailNotify == null) {
+            emailNotify = true;
         }
     }
 

@@ -1,13 +1,16 @@
 package com.helpdesk.dto.department;
 
 import lombok.Builder;
+import lombok.Getter;
 
 import java.time.LocalDateTime;
 
+@Getter
 @Builder
-public record DepartmentResponse(
-    Long id,
-    String name,
-    String description,
-    LocalDateTime createdAt
-) {}
+public class DepartmentResponse {
+    private Long id;
+    private String name;
+    private String description;
+    private Boolean isActive;
+    private LocalDateTime createdAt;
+}

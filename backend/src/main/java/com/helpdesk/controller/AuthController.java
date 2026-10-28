@@ -31,9 +31,10 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout() {
-        // Với JWT stateless, logout chủ yếu được xử lý ở client (xóa token khỏi localStorage/sessionStorage).
-        // Endpoint này xác nhận phía server thành công.
+    public ResponseEntity<?> logout(@RequestBody(required = false) RefreshTokenRequest request) {
+        if (request != null && request.getRefreshToken() != null) {
+            authService.logout(request.getRefreshToken());
+        }
         return ResponseEntity.ok(Map.of("message", "Đăng xuất thành công"));
     }
 }
