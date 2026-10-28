@@ -28,13 +28,15 @@ import java.util.List;
  * Cấu hình Spring Security – JWT Stateless + RBAC.
  * <p>
  * Phân quyền theo vai trò:
- * ┌────────────────┬──────────────────────────────────────────────────────────────┐
- * │ ADMIN          │ Toàn bộ hệ thống: CRUD user, phòng ban, danh mục, SLA, KPI  │
- * │ IT_LEADER      │ Xem tất cả ticket, phân công, confirm AI, báo cáo            │
- * │ IT_SUPPORT     │ Ticket được giao, bình luận, cập nhật trạng thái             │
- * │ EMPLOYEE       │ Tạo ticket, xem ticket của mình, xác nhận xử lý xong         │
- * └────────────────┴──────────────────────────────────────────────────────────────┘
- * Quyền chi tiết được kiểm tra tại tầng Service bằng @PreAuthorize.
+ * ADMIN : Toàn bộ hệ thống: CRUD user, phòng ban, danh mục, SLA, KPI
+ * IT_LEADER : Xem tất cả ticket, phân công, confirm AI, báo cáo
+ * IT_SUPPORT : Ticket được giao, bình luận, cập nhật trạng thái
+ * EMPLOYEE : Tạo ticket, xem ticket của mình, xác nhận xử lý xong
+ * <p>
+ * LƯU Ý: Spring Security khớp rule TỪ TRÊN XUỐNG, rule đầu tiên khớp sẽ được
+ * dùng.
+ * Vì vậy rule cụ thể (vd /users/me) phải đứng TRƯỚC rule rộng (vd /users/**).
+ * Quyền chi tiết hơn được kiểm tra tại tầng Service bằng @PreAuthorize.
  */
 @Configuration
 @EnableWebSecurity
@@ -73,77 +75,78 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            // Stateless – không dùng Session
-            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // Stateless – không dùng Session
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-            // Tắt CSRF (vì dùng JWT)
-            .csrf(AbstractHttpConfigurer::disable)
+                // Tắt CSRF (vì dùng JWT)
+                .csrf(AbstractHttpConfigurer::disable)
 
-            // CORS
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                // CORS
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
 
-            // Phân quyền endpoint
-            .authorizeHttpRequests(auth -> auth
+                // Phân quyền endpoint (khớp từ trên xuống)
+                .authorizeHttpRequests(auth -> auth
 
-                // Public: đăng nhập, refresh token, swagger
-                .requestMatchers(
-                    "/auth/login",
-                    "/auth/refresh",
-                    "/v3/api-docs/**",
-                    "/swagger-ui/**",
-                    "/swagger-ui.html"
-                ).permitAll()
+                        // ─── Public ───────────────────────────────────────────────────
+                        .requestMatchers(
+                                "/auth/login",
+                                "/auth/refresh",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html")
+                        .permitAll()
 
-                // ─── Auth endpoints ───────────────────────────────────────────
-                .requestMatchers(HttpMethod.POST, "/auth/logout").authenticated()
-                .requestMatchers(HttpMethod.POST, "/auth/logout-all").authenticated()
+                        // ─── Auth ─────────────────────────────────────────────────────
+                        // logout chỉ thu hồi theo hash refresh token, cho phép gọi khi
+                        // access token đã hết hạn. Muốn chặt hơn thì đổi thành authenticated().
+                        .requestMatchers(HttpMethod.POST, "/auth/logout").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/auth/logout-all").authenticated()
 
-                // ─── User management (ADMIN only) ─────────────────────────────
-                .requestMatchers(HttpMethod.GET,    "/users/**").hasAnyRole("ADMIN", "IT_LEADER")
-                .requestMatchers(HttpMethod.POST,   "/users").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT,    "/users/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/users/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.POST,   "/users/*/reset-password").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT,    "/users/*/status").hasRole("ADMIN")
+                        // ─── Profile bản thân (PHẢI đứng trước /users/**) ─────────────
+                        .requestMatchers("/users/me", "/users/me/**").authenticated()
 
-                // ─── Profile (bản thân) ───────────────────────────────────────
-                .requestMatchers("/users/me/**").authenticated()
-                .requestMatchers(HttpMethod.POST, "/users/me/change-password").authenticated()
+                        // ─── User management ──────────────────────────────────────────
+                        // GET: ADMIN, IT_LEADER (gồm cả /users/it-support/active)
+                        .requestMatchers(HttpMethod.GET, "/users", "/users/**")
+                        .hasAnyRole("ADMIN", "IT_LEADER")
+                        // POST /users (tạo) và POST /users/{id}/reset-password: chỉ ADMIN
+                        .requestMatchers(HttpMethod.POST, "/users", "/users/*/reset-password")
+                        .hasRole("ADMIN")
+                        // PUT /users/{id} và PUT /users/{id}/status: chỉ ADMIN
+                        .requestMatchers(HttpMethod.PUT, "/users/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/users/**").hasRole("ADMIN")
 
-                // ─── Department management (ADMIN) ────────────────────────────
-                .requestMatchers(HttpMethod.GET,    "/departments/**").authenticated()
-                .requestMatchers(HttpMethod.POST,   "/departments").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT,    "/departments/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/departments/**").hasRole("ADMIN")
+                        // ─── Department management ────────────────────────────────────
+                        .requestMatchers(HttpMethod.GET, "/departments", "/departments/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/departments").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/departments/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/departments/**").hasRole("ADMIN")
 
-                // Tất cả request còn lại: phải xác thực
-                .anyRequest().authenticated()
-            )
+                        // Tất cả request còn lại: phải xác thực
+                        .anyRequest().authenticated())
 
-            // Thêm JWT filter trước UsernamePasswordAuthenticationFilter
-            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+                // Thêm JWT filter trước UsernamePasswordAuthenticationFilter
+                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
 
-            // Custom 401/403 response
-            .exceptionHandling(ex -> ex
-                .authenticationEntryPoint((req, res, authException) -> {
-                    res.setStatus(401);
-                    res.setContentType("application/json;charset=UTF-8");
-                    res.getWriter().write(
-                        """
-                        {"success":false,"message":"Chưa xác thực. Vui lòng đăng nhập.","data":null}
-                        """.strip()
-                    );
-                })
-                .accessDeniedHandler((req, res, accessDeniedException) -> {
-                    res.setStatus(403);
-                    res.setContentType("application/json;charset=UTF-8");
-                    res.getWriter().write(
-                        """
-                        {"success":false,"message":"Bạn không có quyền thực hiện hành động này.","data":null}
-                        """.strip()
-                    );
-                })
-            );
+                // Custom 401/403 response
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((req, res, authException) -> {
+                            res.setStatus(401);
+                            res.setContentType("application/json;charset=UTF-8");
+                            res.getWriter().write(
+                                    """
+                                            {"success":false,"message":"Chưa xác thực. Vui lòng đăng nhập.","data":null}
+                                            """.strip());
+                        })
+                        .accessDeniedHandler((req, res, accessDeniedException) -> {
+                            res.setStatus(403);
+                            res.setContentType("application/json;charset=UTF-8");
+                            res.getWriter().write(
+                                    """
+                                            {"success":false,"message":"Bạn không có quyền thực hiện hành động này.","data":null}
+                                            """
+                                            .strip());
+                        }));
 
         return http.build();
     }

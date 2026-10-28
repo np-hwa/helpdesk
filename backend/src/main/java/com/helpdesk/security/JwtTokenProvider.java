@@ -14,7 +14,8 @@ import java.util.Map;
 /**
  * Tiện ích tạo và xác thực JWT Access Token.
  * <p>
- * Sử dụng thuật toán HS256 với secret key ≥ 256 bit (32 bytes).
+ * Ký HMAC-SHA (jjwt tự chọn HS256/HS384/HS512 theo độ dài secret), secret key ≥
+ * 256 bit (32 bytes).
  * Access token chứa: sub (email), userId, role.
  */
 @Component
@@ -33,15 +34,14 @@ public class JwtTokenProvider {
 
     /** Tạo Access JWT chứa userId và role. */
     public String generateAccessToken(Long userId, String email, String role) {
-        Date now    = new Date();
+        Date now = new Date();
         Date expiry = new Date(now.getTime() + accessTokenExpirationMs);
 
         return Jwts.builder()
                 .subject(email)
                 .claims(Map.of(
-                    "userId", userId,
-                    "role",   role
-                ))
+                        "userId", userId,
+                        "role", role))
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(key)
@@ -56,8 +56,10 @@ public class JwtTokenProvider {
     /** Lấy userId từ token. */
     public Long getUserIdFromToken(String token) {
         Object val = parseClaims(token).get("userId");
-        if (val instanceof Integer i) return i.longValue();
-        if (val instanceof Long l)    return l;
+        if (val instanceof Integer i)
+            return i.longValue();
+        if (val instanceof Long l)
+            return l;
         throw new JwtException("Không tìm thấy userId trong token");
     }
 
@@ -71,7 +73,12 @@ public class JwtTokenProvider {
         try {
             parseClaims(token);
             return true;
+        } catch (ExpiredJwtException ex) {
+            // Token hết hạn là chuyện bình thường (sống 15 phút), không cần cảnh báo
+            log.debug("JWT đã hết hạn: {}", ex.getMessage());
+            return false;
         } catch (JwtException | IllegalArgumentException ex) {
+            // Sai chữ ký, sai định dạng, v.v.: đáng chú ý hơn nên giữ WARN
             log.warn("JWT không hợp lệ: {}", ex.getMessage());
             return false;
         }

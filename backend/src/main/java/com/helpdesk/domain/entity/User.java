@@ -18,14 +18,10 @@ import java.util.List;
  * Implement {@link UserDetails} để Spring Security dùng trực tiếp.
  * 4 vai trò: ADMIN | IT_LEADER | IT_SUPPORT | EMPLOYEE.
  * Mật khẩu lưu hash BCrypt (60 ký tự), không bao giờ lưu plaintext.
- * email_notify (V4): bật/tắt nhận thông báo qua Gmail.
+ * email_notify (V1): bật/tắt nhận thông báo qua Gmail.
  */
 @Entity
-@Table(
-    name = "users",
-    uniqueConstraints = @UniqueConstraint(name = "uk_users_email", columnNames = "email"),
-    indexes = @Index(name = "idx_users_role_status", columnList = "role, status")
-)
+@Table(name = "users", uniqueConstraints = @UniqueConstraint(name = "uk_users_email", columnNames = "email"), indexes = @Index(name = "idx_users_role_status", columnList = "role, status"))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -51,8 +47,7 @@ public class User implements UserDetails {
     private String phone;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "department_id",
-                foreignKey = @ForeignKey(name = "fk_users_department"))
+    @JoinColumn(name = "department_id", foreignKey = @ForeignKey(name = "fk_users_department"))
     private Department department;
 
     @Enumerated(EnumType.STRING)
@@ -80,10 +75,14 @@ public class User implements UserDetails {
     @PrePersist
     void prePersist() {
         LocalDateTime now = LocalDateTime.now();
-        if (createdAt == null) createdAt = now;
-        if (updatedAt == null) updatedAt = now;
-        if (status    == null) status    = UserStatus.ACTIVE;
-        if (emailNotify == null) emailNotify = true;
+        if (createdAt == null)
+            createdAt = now;
+        if (updatedAt == null)
+            updatedAt = now;
+        if (status == null)
+            status = UserStatus.ACTIVE;
+        if (emailNotify == null)
+            emailNotify = true;
     }
 
     @PreUpdate
