@@ -9,8 +9,9 @@ Database sử dụng **MySQL 8.0.16+**, InnoDB và `utf8mb4`. Flyway được ch
 | `migration/V1__create_schema.sql` | Dev và production | Tạo schema mới gồm 16 bảng, khóa ngoại, chỉ mục, full-text search và các ràng buộc dữ liệu |
 | `migration/V2__seed_reference_data.sql` | Dev và production | Dữ liệu cấu hình bắt buộc: 7 danh mục, ma trận ưu tiên, SLA và lịch làm việc |
 | `seed-dev/V3__seed_demo_data.sql` | Chỉ dev/demo | Dữ liệu mẫu: 5 phòng ban, 7 tài khoản, 6 ticket, lịch sử trạng thái/phân công, log AI và thông báo/email mẫu |
+| `migration/V4__department_soft_delete_and_integrity.sql` | Dev và production | Thêm xóa mềm phòng ban và ràng buộc toàn vẹn cho ma trận ưu tiên, giờ làm việc, tệp đính kèm và vòng đời ticket |
 
-Các file có trong workspace hiện tại là V1, V2 và V3. Profile production chỉ chạy thư mục `migration`, nên không nạp dữ liệu demo.
+Profile production chỉ chạy thư mục `migration`, nên không nạp dữ liệu demo.
 
 ## Schema
 
@@ -23,6 +24,7 @@ V1 tạo 16 bảng, chia theo nhóm:
 
 Một số điểm chính của schema hiện tại:
 
+- Phòng ban có `is_active`; ngừng sử dụng bằng cách đặt `FALSE`, không xóa dòng. Tên phòng ban vẫn duy nhất; cần kích hoạt lại phòng ban cũ thay vì tạo bản ghi trùng tên.
 - Vai trò người dùng gồm `ADMIN`, `IT_LEADER`, `IT_SUPPORT`, `EMPLOYEE`; trạng thái tài khoản gồm `ACTIVE`, `INACTIVE`, `LOCKED`.
 - `tickets` lưu riêng thông tin phân loại/ưu tiên chính thức và gợi ý AI (`ai_suggested_*`), có `needs_manual_classification` để đánh dấu ticket cần kiểm tra thủ công.
 - Ticket hỗ trợ lý do hủy (`cancel_reason`), xác nhận kết quả xử lý, tự đóng và mở lại; ticket `CANCELLED` cần có lý do, còn ticket `CLOSED` cần được xác nhận hoàn tất.
@@ -56,10 +58,10 @@ V2 thêm 7 danh mục (`Hardware`, `Software`, `Network & Connectivity`, `Email 
 3. Chạy migration theo môi trường:
 
    ```bash
-   # Dev/demo: V1, V2 và dữ liệu mẫu V3
+   # Dev/demo: V1, V2, dữ liệu mẫu V3 và V4
    docker compose --profile dev run --rm flyway
 
-   # Production: chỉ V1 và V2, không nạp dữ liệu demo
+   # Production: các migration V1, V2, V4; không nạp dữ liệu demo V3
    docker compose --profile prod run --rm flyway-prod
    ```
 
